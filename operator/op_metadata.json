@@ -1,0 +1,466 @@
+{
+  "name": "python_manager",
+  "type": "baseCOMP",
+  "family": "COMP",
+  "tags": [
+    "LOP",
+    "python_managerLOP"
+  ],
+  "generated_at": "2025-12-18T17:59:37.135419",
+  "td_version": "099",
+  "td_build": "2023.12370",
+  "inputs": 0,
+  "outputs": 1,
+  "parameters": {
+    "Python Env": [
+      {
+        "name": "Status",
+        "label": "",
+        "style": "Str",
+        "default": "",
+        "is_read_only": true,
+        "section": false,
+        "help": "Current status message"
+      },
+      {
+        "name": "Selectedenv",
+        "label": "Selected Environment",
+        "style": "Menu",
+        "default": "custom",
+        "is_read_only": false,
+        "section": true,
+        "help": "Select registered environment or Custom to use Base Folder",
+        "menu_names": [
+          "custom"
+        ],
+        "menu_labels": [
+          "Custom / New Venv"
+        ]
+      },
+      {
+        "name": "Basefolder",
+        "label": "Base Folder",
+        "style": "Folder",
+        "default": "",
+        "is_read_only": false,
+        "section": false,
+        "help": "Root folder for custom virtual environment"
+      },
+      {
+        "name": "Createvenv",
+        "label": "Create Venv",
+        "style": "Pulse",
+        "default": "False",
+        "is_read_only": false,
+        "section": true,
+        "help": "Create virtual environment in Base Folder"
+      },
+      {
+        "name": "Addtosyspath",
+        "label": "Add to sys.path",
+        "style": "Toggle",
+        "default": "False",
+        "is_read_only": false,
+        "section": false,
+        "help": "Add venv site-packages to TouchDesigner sys.path. Syncs with sequence import toggle."
+      },
+      {
+        "name": "Openvenv",
+        "label": "Open Console",
+        "style": "Pulse",
+        "default": "False",
+        "is_read_only": false,
+        "section": false,
+        "help": "Open terminal with venv activated"
+      },
+      {
+        "name": "Backend",
+        "label": "Backend",
+        "style": "Menu",
+        "default": "uv",
+        "is_read_only": false,
+        "section": true,
+        "help": "Package manager backend. UV auto-downloads Python, pip uses system Python.",
+        "menu_names": [
+          "uv",
+          "pip"
+        ],
+        "menu_labels": [
+          "UV (Fast)",
+          "pip (Standard)"
+        ]
+      },
+      {
+        "name": "Pythonversion",
+        "label": "Python Version (UV)",
+        "style": "StrMenu",
+        "default": "",
+        "is_read_only": false,
+        "section": false,
+        "help": "Python version for UV venv creation",
+        "menu_names": [
+          "3.9",
+          "3.10",
+          "3.11",
+          "3.12",
+          "3.13"
+        ],
+        "menu_labels": [
+          "3.9",
+          "3.10",
+          "3.11",
+          "3.12",
+          "3.13"
+        ]
+      },
+      {
+        "name": "Venvoptions",
+        "label": "Venv Options",
+        "style": "StrMenu",
+        "default": "",
+        "is_read_only": false,
+        "section": false,
+        "help": "UV venv creation flags. Isolated is default. Seed adds pip/setuptools. You can type custom UV args.",
+        "menu_names": [
+          "none",
+          "--seed",
+          "--system-site-packages",
+          "--relocatable",
+          "--seed --relocatable"
+        ],
+        "menu_labels": [
+          "None (Isolated)",
+          "Seed (pip/setuptools)",
+          "System Packages",
+          "Relocatable",
+          "Seed + Relocatable"
+        ]
+      },
+      {
+        "name": "Pythonexe",
+        "label": "Detected Python",
+        "style": "Str",
+        "default": "",
+        "is_read_only": true,
+        "section": false,
+        "help": "Auto-detected Python executable path"
+      },
+      {
+        "name": "Custompython",
+        "label": "Use Custom Python",
+        "style": "Toggle",
+        "default": "False",
+        "is_read_only": false,
+        "section": false,
+        "help": "Use a custom Python from the menu below instead of auto-detected"
+      },
+      {
+        "name": "Pythonexemenu",
+        "label": "Custom Python",
+        "style": "StrMenu",
+        "default": "",
+        "is_read_only": false,
+        "section": false,
+        "menu_names": [
+          "C:/Users/DotSimulate/AppData/Local/Programs/Python/Python311/python.exe",
+          "C:\\Users\\DotSimulate\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
+          "C:\\Users\\DotSimulate\\AppData\\Local\\Programs\\Python\\Python310\\python.exe",
+          "C:\\Users\\DotSimulate\\AppData\\Local\\Microsoft\\WindowsApps\\python.exe",
+          "C:\\Users\\DotSimulate\\AppData\\Local\\Microsoft\\WindowsApps\\python.exe"
+        ],
+        "menu_labels": [
+          "Python311",
+          "Python311",
+          "Python310",
+          "python.exe",
+          "python.exe"
+        ]
+      },
+      {
+        "name": "Setpython",
+        "label": "Refresh Python",
+        "style": "Pulse",
+        "default": "False",
+        "is_read_only": false,
+        "section": false,
+        "help": "Re-detect available Python installations"
+      },
+      {
+        "name": "Actionsheader",
+        "label": "Install / Manage Packages",
+        "style": "Header",
+        "default": "",
+        "is_read_only": false,
+        "section": true
+      },
+      {
+        "name": "Pippackage",
+        "label": "Package",
+        "style": "Str",
+        "default": "",
+        "is_read_only": false,
+        "section": false,
+        "help": "Package name(s) to install/uninstall (space-separated)"
+      },
+      {
+        "name": "Pipinstall",
+        "label": "Install",
+        "style": "Pulse",
+        "default": "False",
+        "is_read_only": false,
+        "section": false,
+        "help": "Install package(s)"
+      },
+      {
+        "name": "Pipuninstall",
+        "label": "Uninstall",
+        "style": "Pulse",
+        "default": "False",
+        "is_read_only": false,
+        "section": false,
+        "help": "Uninstall package(s)"
+      },
+      {
+        "name": "Pipupdate",
+        "label": "Update",
+        "style": "Pulse",
+        "default": "False",
+        "is_read_only": false,
+        "section": false,
+        "help": "Update package(s)"
+      },
+      {
+        "name": "Listinstalledpackages",
+        "label": "List Packages",
+        "style": "Pulse",
+        "default": "False",
+        "is_read_only": false,
+        "section": true,
+        "help": "List all installed packages"
+      },
+      {
+        "name": "Createreqtxt",
+        "label": "Export requirements.txt",
+        "style": "Pulse",
+        "default": "False",
+        "is_read_only": false,
+        "section": false,
+        "help": "Export installed packages to requirements.txt"
+      },
+      {
+        "name": "Pipinstallfromlist",
+        "label": "Install from File",
+        "style": "Pulse",
+        "default": "False",
+        "is_read_only": false,
+        "section": true,
+        "help": "Install packages from requirements file"
+      },
+      {
+        "name": "Requirementsfile",
+        "label": "Requirements File",
+        "style": "File",
+        "default": "",
+        "is_read_only": false,
+        "section": false,
+        "help": "Path to requirements.txt file"
+      },
+      {
+        "name": "Utilheader",
+        "label": "Utilities / Debug",
+        "style": "Header",
+        "default": "",
+        "is_read_only": false,
+        "section": true
+      },
+      {
+        "name": "Printsyspath",
+        "label": "Print sys.path",
+        "style": "Pulse",
+        "default": "False",
+        "is_read_only": false,
+        "section": false,
+        "help": "Print current sys.path to textport and logger"
+      },
+      {
+        "name": "Printpythoninfo",
+        "label": "Print Python Info",
+        "style": "Pulse",
+        "default": "False",
+        "is_read_only": false,
+        "section": false,
+        "help": "Print venv info, CUDA, and packages to textport"
+      },
+      {
+        "name": "Upgradepip",
+        "label": "Upgrade pip",
+        "style": "Pulse",
+        "default": "False",
+        "is_read_only": false,
+        "section": false,
+        "help": "Upgrade pip to latest version"
+      },
+      {
+        "name": "Showconsole",
+        "label": "Show Console",
+        "style": "Toggle",
+        "default": "False",
+        "is_read_only": false,
+        "section": true,
+        "help": "Show console window for operations"
+      },
+      {
+        "name": "Blockthread",
+        "label": "Block Thread",
+        "style": "Toggle",
+        "default": "False",
+        "is_read_only": false,
+        "section": false,
+        "help": "Wait for operations to complete"
+      },
+      {
+        "name": "Showpopups",
+        "label": "Show Popups",
+        "style": "Toggle",
+        "default": "False",
+        "is_read_only": false,
+        "section": false,
+        "help": "Show popup notifications"
+      }
+    ],
+    "Environments": [
+      {
+        "name": "Seqremoval",
+        "label": "On Seq Remove",
+        "style": "Menu",
+        "default": "auto",
+        "is_read_only": false,
+        "section": false,
+        "help": "What to do when a venv is removed from the sequence",
+        "menu_names": [
+          "auto",
+          "keep"
+        ],
+        "menu_labels": [
+          "Auto-remove from sys.path",
+          "Keep in sys.path"
+        ]
+      },
+      {
+        "name": "Venv",
+        "label": "Venv",
+        "style": "Sequence",
+        "default": "0",
+        "is_read_only": false,
+        "section": false
+      },
+      {
+        "name": "Venv0name",
+        "label": "name",
+        "style": "Str",
+        "default": "",
+        "is_read_only": false,
+        "section": false
+      },
+      {
+        "name": "Venv0path",
+        "label": "path",
+        "style": "Folder",
+        "default": "",
+        "is_read_only": false,
+        "section": false
+      },
+      {
+        "name": "Venv0import",
+        "label": "import",
+        "style": "Toggle",
+        "default": "False",
+        "is_read_only": false,
+        "section": false
+      },
+      {
+        "name": "Venv0open",
+        "label": "open",
+        "style": "Pulse",
+        "default": "False",
+        "is_read_only": false,
+        "section": false
+      },
+      {
+        "name": "Venv0status",
+        "label": "Status",
+        "style": "Str",
+        "default": "",
+        "is_read_only": true,
+        "section": false
+      }
+    ],
+    "About": [
+      {
+        "name": "Bypass",
+        "label": "Bypass",
+        "style": "Toggle",
+        "default": "False",
+        "is_read_only": false,
+        "section": false
+      },
+      {
+        "name": "Showbuiltin",
+        "label": "Show Built-in Parameters",
+        "style": "Toggle",
+        "default": "False",
+        "is_read_only": false,
+        "section": false
+      },
+      {
+        "name": "Version",
+        "label": "Version",
+        "style": "Str",
+        "default": "",
+        "is_read_only": true,
+        "section": true
+      },
+      {
+        "name": "Lastupdated",
+        "label": "Last Updated",
+        "style": "Str",
+        "default": "",
+        "is_read_only": true,
+        "section": false
+      },
+      {
+        "name": "Creator",
+        "label": "Creator",
+        "style": "Str",
+        "default": "",
+        "is_read_only": true,
+        "section": true
+      },
+      {
+        "name": "Website",
+        "label": "Website",
+        "style": "Str",
+        "default": "",
+        "is_read_only": true,
+        "section": false
+      },
+      {
+        "name": "Chattd",
+        "label": "ChatTD Operator",
+        "style": "OP",
+        "default": "",
+        "is_read_only": false,
+        "section": true
+      },
+      {
+        "name": "Resetop",
+        "label": "Reset Operator",
+        "style": "Pulse",
+        "default": "False",
+        "is_read_only": false,
+        "section": true,
+        "help": "Reinitialize the operator"
+      }
+    ]
+  }
+}
