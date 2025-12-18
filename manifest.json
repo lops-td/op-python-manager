@@ -1,0 +1,17 @@
+{
+  "name": "python_manager",
+  "version": "1.0.0",
+  "description": "PythonEnvManagerEXT - Unified Python virtual environment management for LOPs",
+  "category": "utility",
+  "release_level": "prod",
+  "td": {
+    "build": "2023.12370"
+  },
+  "python": {
+    "backend": "pip",
+    "config": "requirements.txt",
+    "venv": "shared"
+  },
+  "author": "dotsimulate",
+  "repository": "lops-td/op-python-manager"
+}
