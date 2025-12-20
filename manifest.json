@@ -2,6 +2,9 @@
   "name": "python_manager",
   "version": "1.0.0",
   "description": "PythonEnvManagerEXT - Unified Python virtual environment management for LOPs",
+  "extends": [
+    "util-base-lop"
+  ],
   "category": "utility",
   "release_level": "prod",
   "td": {
