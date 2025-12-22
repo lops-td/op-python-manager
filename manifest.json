@@ -1,11 +1,11 @@
 {
   "name": "python_manager",
   "version": "1.0.0",
-  "description": "PythonEnvManagerEXT - Unified Python virtual environment management for LOPs",
+  "description": "Unified Python virtual environment manager for TouchDesigner. Handles venv creation, pip/uv package management, and dynamic sys.path orchestration to ensure operators have isolated and version-synced dependencies.",
   "extends": [
     "util-base-lop"
   ],
-  "category": "utility",
+  "category": "lops-controls",
   "release_level": "prod",
   "td": {
     "build": "2023.12370"
