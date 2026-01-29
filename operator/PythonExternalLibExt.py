@@ -61,6 +61,7 @@ class PythonExternalLibExt(DotLOPUtils):
 
         self._setup_parameters()
         self.Setpython()  # Auto-detect python on init
+        self._auto_register_basefolder_venv()  # Register existing venv from Basefolder
         self.Refreshenvmenu()  # Populate environment menu from sequence
         self._log("PythonExternalLibExt initialized")
 
@@ -403,10 +404,44 @@ class PythonExternalLibExt(DotLOPUtils):
             exe = self.venv.get_python_exe(venv_path)
             self._log(f"Venv Python: {exe}" if exe else "Venv Python not found")
 
+    def _check_backend_available(self) -> str:
+        """
+        Check if the selected backend is available. If UV is selected but not
+        available, prompt user to switch to pip.
+
+        Returns:
+            str: Backend to use ('uv', 'pip') or None if user cancelled
+        """
+        backend = self.ownerComp.par.Backend.eval()
+
+        if backend == 'uv':
+            if not self.venv.check_uv_available():
+                # UV not available - prompt user
+                result = ui.messageBox(
+                    'UV Not Found',
+                    'UV package manager is not installed on this system.\n\n'
+                    'Would you like to switch to pip (standard Python package manager) instead?\n\n'
+                    'Note: pip requires Python to be installed separately.',
+                    buttons=['Switch to pip', 'Cancel']
+                )
+                if result == 0:  # Switch to pip
+                    self.ownerComp.par.Backend = 'pip'
+                    self._log("Switched backend to pip (UV not available)")
+                    return 'pip'
+                else:
+                    self._log("Operation cancelled - UV not available", level='WARNING')
+                    return None
+        return backend
+
     # ==================== BACKWARDS-COMPATIBLE API ====================
 
     def Createvenv(self, folder: str = None):
         """Create virtual environment."""
+        # Check backend availability first
+        backend = self._check_backend_available()
+        if not backend:
+            return False
+
         target_folder = folder or self.ownerComp.par.Basefolder.eval()
 
         # Check if Selectedenv is a valid existing venv
@@ -433,7 +468,7 @@ class PythonExternalLibExt(DotLOPUtils):
 
         venv_path = os.path.join(target_folder, 'venv')
 
-        if self.ownerComp.par.Backend.eval() == 'uv':
+        if backend == 'uv':
             # Venvoptions contains the exact UV flags (e.g., '--seed', '--seed --relocatable')
             venv_option = self.ownerComp.par.Venvoptions.eval().strip()
             extra_args = venv_option.split() if venv_option else []
@@ -477,6 +512,9 @@ class PythonExternalLibExt(DotLOPUtils):
 
     def Pipinstall(self, package_name: str = None, venv_path: str = None):
         """Install package(s)."""
+        backend = self._check_backend_available()
+        if not backend:
+            return False
         resolved = self._check_venv_path(venv_path)
         if not resolved:
             return False
@@ -489,7 +527,7 @@ class PythonExternalLibExt(DotLOPUtils):
         success = self.venv.install_packages(
             venv_path=resolved,
             packages=package_list,
-            backend=self.ownerComp.par.Backend.eval()
+            backend=backend
         )
         if success:
             self._log(f"Installed: {', '.join(package_list)}")
@@ -499,6 +537,9 @@ class PythonExternalLibExt(DotLOPUtils):
 
     def Pipuninstall(self, package_name: str = None, venv_path: str = None):
         """Uninstall package(s)."""
+        backend = self._check_backend_available()
+        if not backend:
+            return False
         resolved = self._check_venv_path(venv_path)
         if not resolved:
             return False
@@ -511,7 +552,7 @@ class PythonExternalLibExt(DotLOPUtils):
         success = self.venv.uninstall_packages(
             venv_path=resolved,
             packages=package_list,
-            backend=self.ownerComp.par.Backend.eval()
+            backend=backend
         )
         if success:
             self._log(f"Uninstalled: {', '.join(package_list)}")
@@ -521,6 +562,9 @@ class PythonExternalLibExt(DotLOPUtils):
 
     def Pipupdate(self, package_name: str = None, venv_path: str = None):
         """Update package(s)."""
+        backend = self._check_backend_available()
+        if not backend:
+            return False
         resolved = self._check_venv_path(venv_path)
         if not resolved:
             return False
@@ -533,7 +577,7 @@ class PythonExternalLibExt(DotLOPUtils):
         success = self.venv.install_packages(
             venv_path=resolved,
             packages=package_list,
-            backend=self.ownerComp.par.Backend.eval(),
+            backend=backend,
             extra_args=['--upgrade']
         )
         if success:
@@ -544,6 +588,9 @@ class PythonExternalLibExt(DotLOPUtils):
 
     def Pipinstallfromlist(self, requirements_file_path: str = None, venv_path: str = None):
         """Install packages from requirements file."""
+        backend = self._check_backend_available()
+        if not backend:
+            return False
         resolved = self._check_venv_path(venv_path)
         if not resolved:
             return False
@@ -555,7 +602,7 @@ class PythonExternalLibExt(DotLOPUtils):
         success = self.venv.install_packages(
             venv_path=resolved,
             packages=['-r', req_file],
-            backend=self.ownerComp.par.Backend.eval()
+            backend=backend
         )
         if success:
             self._log(f"Installed packages from {req_file}")
@@ -565,12 +612,15 @@ class PythonExternalLibExt(DotLOPUtils):
 
     def Listinstalledpackages(self, venv_path: str = None) -> list:
         """List all installed packages in the venv."""
+        backend = self._check_backend_available()
+        if not backend:
+            return []
         resolved = self._check_venv_path(venv_path)
         if not resolved:
             return []
         packages = self.venv.list_packages(
             venv_path=resolved,
-            backend=self.ownerComp.par.Backend.eval()
+            backend=backend
         )
         if not packages:
             self._log("No Packages Installed / Venv Exists")
@@ -585,12 +635,15 @@ class PythonExternalLibExt(DotLOPUtils):
 
     def Createreqtxt(self, venv_path: str = None, output_path: str = None):
         """Export installed packages to requirements.txt."""
+        backend = self._check_backend_available()
+        if not backend:
+            return False
         resolved = self._check_venv_path(venv_path)
         if not resolved:
             return False
         packages = self.venv.list_packages(
             venv_path=resolved,
-            backend=self.ownerComp.par.Backend.eval()
+            backend=backend
         )
         # Determine output path - use provided, or derive from venv parent, or basefolder
         if output_path:
@@ -1224,8 +1277,50 @@ except Exception as e:
             self._update_sequence_status(entry['index'])
         self._log(f"Updated status for {len(entries)} environments")
 
+    def _is_venv_in_sequence(self, venv_path: str) -> bool:
+        """Check if a venv path is already registered in the sequence."""
+        entries = self._get_sequence_entries()
+        for entry in entries:
+            if entry['path'] == venv_path:
+                return True
+        return False
+
+    def _auto_register_basefolder_venv(self):
+        """Auto-register venv from Basefolder on init if it exists and isn't already registered."""
+        base = self.ownerComp.par.Basefolder.eval()
+        if not base:
+            return
+
+        venv_path = os.path.join(base, 'venv')
+        if not os.path.exists(venv_path):
+            # Try without 'venv' subfolder (in case Basefolder IS the venv)
+            if os.path.exists(os.path.join(base, 'Scripts', 'python.exe')) or \
+               os.path.exists(os.path.join(base, 'bin', 'python')):
+                venv_path = base
+            else:
+                return
+
+        # Check if already in sequence (deduplication)
+        if self._is_venv_in_sequence(venv_path):
+            self._log(f"Venv already registered: {venv_path}")
+            return
+
+        # Add to registry
+        name = os.path.basename(base)
+        if self._add_to_registry(name, venv_path):
+            self._log(f"Auto-registered venv from Basefolder: {venv_path}")
+            # If Addtosyspath toggle is on, set sequence import toggle (delayed 1 frame)
+            if self.ownerComp.par.Addtosyspath.eval():
+                run("args[0]._set_sequence_import_for_path(args[1], True)",
+                    self, venv_path, delayFrames=1)
+
     def _add_to_registry(self, name: str, venv_path: str) -> bool:
         """Add a venv to the registry sequence."""
+        # Deduplication check
+        if self._is_venv_in_sequence(venv_path):
+            self._log(f"Venv already in registry: {venv_path}")
+            return True
+
         slot = self._find_next_sequence_slot()
 
         name_par = getattr(self.ownerComp.par, f'Venv{slot}name', None)
