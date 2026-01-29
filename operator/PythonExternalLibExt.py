@@ -1,11 +1,11 @@
 """
-PythonEnvManagerEXT - Unified Python virtual environment management for LOPs
+PythonExternalLibExt - Unified Python virtual environment management for LOPs
 
 Wraps VenvCore with TouchDesigner parameter interface.
 Provides backwards-compatible API for existing operators.
 
 External access pattern:
-    pm = op.LOP.op('python_env_manager')
+    pm = op.LOP.op('python_manager')
     pm.venv.create_venv('/path/to/venv', backend='uv')
     pm.venv.install_packages('/path/to/venv', ['torch'])
 """
@@ -13,6 +13,7 @@ External access pattern:
 import subprocess
 import sys
 import os
+import tdu
 
 from dot_lop_utils import DotLOPUtils
 
@@ -43,7 +44,7 @@ def get_short_path_name(long_path):
     return long_path
 
 
-class PythonEnvManagerEXT(DotLOPUtils):
+class PythonExternalLibExt(DotLOPUtils):
     """
     TouchDesigner extension for Python virtual environment management.
 
@@ -61,7 +62,7 @@ class PythonEnvManagerEXT(DotLOPUtils):
         self._setup_parameters()
         self.Setpython()  # Auto-detect python on init
         self.Refreshenvmenu()  # Populate environment menu from sequence
-        self._log("PythonEnvManager initialized")
+        self._log("PythonExternalLibExt initialized")
 
     def _log(self, msg, level='INFO'):
         """Wrapper for logger.log to simplify logging calls."""
@@ -685,6 +686,179 @@ class PythonEnvManagerEXT(DotLOPUtils):
             self._log(f"Removed from sys.path: {site_packages}")
             return True
         return False
+
+    # ==================== LEGACY COMPAT METHODS ====================
+    # These methods provide backwards compatibility with existing operators
+    # that relied on the old PythonExternalLibExt API.
+
+    def check_venv_exists(self):
+        """
+        Legacy API: Check if venv exists and return (python_exe, base_folder) tuple.
+
+        Returns:
+            tuple: (venv_python_path, base_folder) or (False, None) if not found
+        """
+        base_folder = self.ownerComp.par.Basefolder.eval()
+        if not base_folder or base_folder == '':
+            # Check selected env first
+            selected = self.ownerComp.par.Selectedenv.eval()
+            if selected and selected != 'custom' and os.path.exists(selected):
+                # Selected is a venv path directly
+                venv_path = selected
+                base_folder = os.path.dirname(venv_path)
+            else:
+                if self.ownerComp.par.Showpopups.eval():
+                    if not self.select_install_popup():
+                        return False, None
+                    base_folder = self.ownerComp.par.Basefolder.eval()
+                else:
+                    return False, None
+
+        base_folder = tdu.expandPath(base_folder)
+
+        # Check for venv python executable
+        if is_mac():
+            venv_python = os.path.join(base_folder, 'venv', 'bin', 'python')
+            if not os.path.exists(venv_python):
+                venv_python = os.path.join(base_folder, '.venv', 'bin', 'python')
+                if not os.path.exists(venv_python):
+                    venv_python = os.path.join(base_folder, 'venv', 'python')
+        else:
+            venv_python = os.path.join(base_folder, 'venv', 'Scripts', 'python.exe')
+            if not os.path.exists(venv_python):
+                venv_python = os.path.join(base_folder, '.venv', 'Scripts', 'python.exe')
+                if not os.path.exists(venv_python):
+                    venv_python = os.path.join(base_folder, 'venv', 'python.exe')
+
+        if not os.path.exists(venv_python):
+            self._log("Virtual environment Python executable not found.", level='WARNING')
+            return False, None
+
+        venv_python = os.path.normpath(venv_python)
+        base_folder = os.path.normpath(base_folder)
+        return venv_python, base_folder
+
+    def get_venv_site_packages_path(self):
+        """
+        Legacy API: Get the site-packages path for the current venv.
+
+        Returns:
+            str: Path to site-packages, or None if not found
+        """
+        venv_python, base_folder = self.check_venv_exists()
+        if not venv_python:
+            return None
+
+        if is_mac():
+            venv_path = os.path.join(base_folder, 'venv', 'lib',
+                                     f'python{sys.version_info.major}.{sys.version_info.minor}',
+                                     'site-packages')
+        else:
+            venv_path = os.path.join(base_folder, 'venv', 'Lib', 'site-packages')
+
+        if os.path.exists(venv_path):
+            return venv_path
+        else:
+            self._log(f'Venv site-packages path does not exist: {venv_path}', level='WARNING')
+            return None
+
+    def list_installed_packages(self):
+        """
+        Legacy API: List installed packages and return as list of strings.
+
+        Returns:
+            list: Package strings in format "name==version"
+        """
+        venv_python, base_folder = self.check_venv_exists()
+        if not venv_python:
+            return []
+
+        try:
+            if is_mac():
+                command = f"unset PYTHONPATH && {venv_python} -m pip list"
+                process = subprocess.Popen(command, stdout=subprocess.PIPE,
+                                          stderr=subprocess.PIPE, shell=True)
+            else:
+                process = subprocess.Popen([venv_python, '-m', 'pip', 'list'],
+                                          stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+            result, error = process.communicate()
+            if process.returncode != 0:
+                self._log(f"Error listing packages: {error.decode('utf-8')}", level='ERROR')
+                return []
+
+            result = result.decode('utf-8')
+            # Return the list of packages, skipping the header rows
+            return result.split('\n')[2:]
+        except Exception as e:
+            self._log(f"Exception listing packages: {e}", level='ERROR')
+            return []
+
+    def print_cuda_availability(self):
+        """
+        Legacy API: Print CUDA availability info.
+
+        Returns:
+            str: CUDA info string
+        """
+        venv_python, _ = self.check_venv_exists()
+        if not venv_python:
+            msg = "CUDA Availability: No virtual environment detected"
+            print(msg)
+            return msg
+
+        cuda_check_script = '''
+import sys
+try:
+    import torch
+    print(f"PyTorch version: {torch.__version__}")
+    print(f"CUDA available: {torch.cuda.is_available()}")
+    if torch.cuda.is_available():
+        print(f"CUDA version: {torch.version.cuda}")
+        print(f"Number of CUDA devices: {torch.cuda.device_count()}")
+except ImportError:
+    print("PyTorch is not installed")
+except Exception as e:
+    print(f"Error checking CUDA: {e}")
+'''
+        try:
+            result = subprocess.run([venv_python, "-c", cuda_check_script],
+                                   capture_output=True, text=True, check=True)
+            cuda_info = result.stdout.strip()
+            print(cuda_info)
+            return cuda_info
+        except subprocess.CalledProcessError as e:
+            cuda_info = f"Error checking CUDA: {e.stderr.strip()}"
+            print(cuda_info)
+            return cuda_info
+
+    def select_install_popup(self):
+        """
+        Legacy API: Show popup to select/create venv folder.
+
+        Returns:
+            bool: True if folder was selected and venv created, False otherwise
+        """
+        if hasattr(self, 'popup_is_open') and self.popup_is_open:
+            return False
+
+        self.popup_is_open = True
+        message = """
+        The Basefolder parameter is not set.
+        Would you like to select or create a new folder?
+        """
+        buttons = ['Select/Create Folder', 'Cancel']
+        choice = ui.messageBox('Virtual Environment Not Found', message, buttons=buttons)
+        self.popup_is_open = False
+
+        if choice == 0:
+            blocked = self.ownerComp.par.Blockthread.eval()
+            self.ownerComp.par.Blockthread = True
+            created = self.Createvenv()
+            self.ownerComp.par.Blockthread = blocked
+            return created
+        else:
+            return False
 
     # ==================== MANAGED SYSPATHS DAT ====================
 

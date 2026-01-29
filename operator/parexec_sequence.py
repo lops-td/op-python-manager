@@ -6,7 +6,7 @@
 # Make sure the corresponding toggle is enabled in the Parameter Execute DAT.
 
 def onValueChange(par, prev):
-	parent().ext.PythonEnvManagerEXT.sequence_update(par)
+	parent().ext.PythonExternalLibExt.sequence_update(par)
 
 # Called at end of frame with complete list of individual parameter changes.
 # The changes are a list of named tuples, where each tuple is (Par, previous value)
@@ -18,7 +18,7 @@ def onValuesChanged(changes):
 	return
 
 def onPulse(par):
-	parent().ext.PythonEnvManagerEXT.sequence_update(par)
+	parent().ext.PythonExternalLibExt.sequence_update(par)
 
 def onExpressionChange(par, val, prev):
 	return
