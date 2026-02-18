@@ -63,6 +63,7 @@ class PythonExternalLibExt(DotLOPUtils):
         self.Setpython()  # Auto-detect python on init
         self._auto_register_basefolder_venv()  # Register existing venv from Basefolder
         self.Refreshenvmenu()  # Populate environment menu from sequence
+        self._import_sequence_venvs()  # Add venvs with import=True to sys.path
         self._log("PythonExternalLibExt initialized")
 
     def _log(self, msg, level='INFO'):
@@ -1232,6 +1233,14 @@ except Exception as e:
         self.ownerComp.par.Selectedenv.menuNames = menu_names
         self.ownerComp.par.Selectedenv.menuLabels = menu_labels
         self._log(f"Refreshed environment menu: {len(entries)} registered")
+
+    def _import_sequence_venvs(self):
+        """On init, add all venvs with import=True to sys.path."""
+        entries = self._get_sequence_entries()
+        for entry in entries:
+            if entry['import'] and entry['path']:
+                self._add_to_syspath_direct(entry['path'])
+                self._update_sequence_status(entry['index'])
 
     def _update_sequence_status(self, index: int):
         """Update status for a sequence entry (max 20 chars)."""
