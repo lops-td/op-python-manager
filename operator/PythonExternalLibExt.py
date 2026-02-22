@@ -60,10 +60,13 @@ class PythonExternalLibExt(DotLOPUtils):
         self.venv = VenvCore(logger=self._log)
 
         self._setup_parameters()
-        self.Setpython()  # Auto-detect python on init
-        self._auto_register_basefolder_venv()  # Register existing venv from Basefolder
-        self.Refreshenvmenu()  # Populate environment menu from sequence
-        self._import_sequence_venvs()  # Add venvs with import=True to sys.path
+        try:
+            self.Setpython()  # Auto-detect python on init
+            self._auto_register_basefolder_venv()  # Register existing venv from Basefolder
+            self.Refreshenvmenu()  # Populate environment menu from sequence
+            self._import_sequence_venvs()  # Add venvs with import=True to sys.path
+        except Exception as e:
+            self._log(f"Init error (operator still loaded): {e}", level='ERROR')
         self._log("PythonExternalLibExt initialized")
 
     def _log(self, msg, level='INFO'):
@@ -1235,11 +1238,19 @@ except Exception as e:
         self._log(f"Refreshed environment menu: {len(entries)} registered")
 
     def _import_sequence_venvs(self):
-        """On init, add all venvs with import=True to sys.path."""
+        """On init, add all venvs with import=True to sys.path.
+        Validates paths exist before importing — handles cross-computer project transfers."""
         entries = self._get_sequence_entries()
         for entry in entries:
             if entry['import'] and entry['path']:
-                self._add_to_syspath_direct(entry['path'])
+                if not os.path.exists(entry['path']):
+                    self._log(f"Venv path not found (skipping import): {entry['path']}", level='WARNING')
+                    self._update_sequence_status(entry['index'])
+                    continue
+                try:
+                    self._add_to_syspath_direct(entry['path'])
+                except Exception as e:
+                    self._log(f"Failed to import venv {entry['path']}: {e}", level='ERROR')
                 self._update_sequence_status(entry['index'])
 
     def _update_sequence_status(self, index: int):
