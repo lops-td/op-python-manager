@@ -1,6 +1,6 @@
 {
   "name": "python_manager",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Unified Python virtual environment manager for TouchDesigner. Handles venv creation, pip/uv package management, and dynamic sys.path orchestration to ensure operators have isolated and version-synced dependencies.",
   "extends": [
     "util-base-lop"
