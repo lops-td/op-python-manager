@@ -13,6 +13,7 @@ External access pattern:
 import subprocess
 import sys
 import os
+import json
 import tdu
 
 from dot_lop_utils import DotLOPUtils
@@ -59,10 +60,19 @@ class PythonExternalLibExt(DotLOPUtils):
         VenvCore = mod('venv_core').VenvCore
         self.venv = VenvCore(logger=self._log)
 
+        # Import config storage module
+        PythonConfigStorage = mod('python_config_storage').PythonConfigStorage
+        self.storage = PythonConfigStorage(ownerComp, self.logger, self.ChatTD)
+
+        # Track which tier owns each sequence index (rebuilt on load)
+        self._entry_layers = {}
+
+        self._setup_project_config_dat()
         self._setup_parameters()
         try:
             self.Setpython()  # Auto-detect python on init
-            self._auto_register_basefolder_venv()  # Register existing venv from Basefolder
+            self._maybe_migrate_from_legacy_sequence()  # One-time migration
+            self._load_and_rebuild_registry()  # Load from JSON tiers, rebuild display
             self.Refreshenvmenu()  # Populate environment menu from sequence
             self._import_sequence_venvs()  # Add venvs with import=True to sys.path
         except Exception as e:
@@ -72,6 +82,46 @@ class PythonExternalLibExt(DotLOPUtils):
     def _log(self, msg, level='INFO'):
         """Wrapper for logger.log to simplify logging calls."""
         self.logger.log(msg, level=level)
+
+    # ==================== PROJECT CONFIG DAT ====================
+
+    def _setup_project_config_dat(self):
+        """Create or find the project_venv_config text DAT for project-tier storage."""
+        dat_name = 'project_venv_config'
+        existing = self.ownerComp.op(dat_name)
+        if existing:
+            self.project_config_dat = existing
+        else:
+            self.project_config_dat = self.ownerComp.create(textDAT, dat_name)
+            if self.project_config_dat:
+                self.project_config_dat.text = '{}'
+                self.project_config_dat.nodeX = 400
+                self.project_config_dat.nodeY = -300
+                self.project_config_dat.viewer = False
+
+    def _read_project_venvs(self) -> dict:
+        """Read venv entries from the project config DAT."""
+        if not self.project_config_dat:
+            return {}
+        try:
+            text = self.project_config_dat.text.strip()
+            if not text:
+                return {}
+            data = json.loads(text)
+            if 'version' in data and 'venvs' in data:
+                return data['venvs']
+            elif isinstance(data, dict):
+                return data
+        except (json.JSONDecodeError, Exception):
+            pass
+        return {}
+
+    def _write_project_venvs(self, venvs: dict):
+        """Write venv entries to the project config DAT."""
+        if not self.project_config_dat:
+            return
+        data = {'version': '1.0', 'venvs': venvs}
+        self.project_config_dat.text = json.dumps(data, indent=2)
 
     # ==================== PARAMETER SETUP ====================
 
@@ -229,11 +279,31 @@ class PythonExternalLibExt(DotLOPUtils):
         # -------------------- ENVIRONMENTS PAGE --------------------
         env_page = 'Environments'
 
+        self.create_parameter('Configlocation', 'menu', page=env_page,
+            label='Save New Envs To', default='user',
+            menuNames=['user', 'project_folder', 'project'],
+            menuLabels=['User Config', 'Project Folder (.lops/)', 'Project (.toe)'],
+            help="Where new venvs are saved. User = machine-wide, Folder = portable, Project = in .toe file.",
+            section=True)
+
+        self.create_parameter('Configpath', 'str', page=env_page,
+            label='Config Path', default='', readOnly=True,
+            help="Resolved path of the active config location")
+
+        self.create_parameter('Refreshregistry', 'pulse', page=env_page,
+            label='Refresh Registry',
+            help="Reload venv registry from all config tiers")
+
+        self.create_parameter('Editconfigfile', 'pulse', page=env_page,
+            label='Edit Config File',
+            help="Open the active config JSON in system editor")
+
         self.create_parameter('Seqremoval', 'menu', page=env_page,
             label='On Seq Remove', default='auto',
             menuNames=['auto', 'keep'],
             menuLabels=['Auto-remove from sys.path', 'Keep in sys.path'],
-            help="What to do when a venv is removed from the sequence")
+            help="What to do when a venv is removed from the sequence",
+            section=True)
 
     # ==================== PYTHON DETECTION ====================
 
@@ -1164,6 +1234,10 @@ except Exception as e:
         self.ownerComp.par.Venvoptions = ''
         self.ownerComp.par.Selectedenv = 'custom'
 
+        # Clear project config DAT
+        if hasattr(self, 'project_config_dat') and self.project_config_dat:
+            self.project_config_dat.text = '{}'
+
         # Clear sequence - set to 1 block and clear index 0
         venv_seq = getattr(self.ownerComp.seq, 'Venv', None)
         if venv_seq is not None:
@@ -1254,7 +1328,7 @@ except Exception as e:
                 self._update_sequence_status(entry['index'])
 
     def _update_sequence_status(self, index: int):
-        """Update status for a sequence entry (max 20 chars)."""
+        """Update status for a sequence entry (max 20 chars). Shows [tier] + version/state."""
         path_par = getattr(self.ownerComp.par, f'Venv{index}path', None)
         status_par = getattr(self.ownerComp.par, f'Venv{index}status', None)
         import_par = getattr(self.ownerComp.par, f'Venv{index}import', None)
@@ -1267,8 +1341,9 @@ except Exception as e:
             status_par.val = ''
             return
 
-        # Build status string (max 20 chars)
-        parts = []
+        # Get tier label
+        layer = self._get_entry_layer(index)
+        parts = [f"[{layer}]"]
 
         # Check if imported
         if import_par and import_par.eval():
@@ -1278,15 +1353,19 @@ except Exception as e:
             else:
                 parts.append('○')
 
-        # Get Python version
+        # Get Python version or stale indicator
         if os.path.exists(venv_path):
             info = self.venv.check_venv(venv_path)
             ver = info.get('python_version', '')
             if ver:
-                # Extract just major.minor (e.g., "3.11" from "3.11.1")
-                parts.append(ver.rsplit('.', 1)[0] if '.' in ver else ver)
+                ver_clean = ver.replace('Python ', '')
+                ver_parts = ver_clean.split('.')
+                if len(ver_parts) >= 2:
+                    parts.append(f"{ver_parts[0]}.{ver_parts[1]}")
+                else:
+                    parts.append(ver_clean)
         else:
-            parts.append('missing')
+            parts.append('STALE')
 
         status_par.val = ' '.join(parts)[:20]
 
@@ -1305,70 +1384,247 @@ except Exception as e:
                 return True
         return False
 
-    def _auto_register_basefolder_venv(self):
-        """Auto-register venv from Basefolder on init if it exists and isn't already registered."""
+    # ==================== CONFIG TIER METHODS ====================
+
+    def _load_and_rebuild_registry(self):
+        """Load merged venvs from all config tiers and rebuild sequence display."""
+        project_venvs = self._read_project_venvs()
+        merged = self.storage.get_merged_venvs(project_venvs)
+
+        # Migrate basefolder if it's not in any tier yet
+        self._maybe_migrate_basefolder(merged)
+
+        # Re-merge after potential migration
+        if self._basefolder_migrated:
+            project_venvs = self._read_project_venvs()
+            merged = self.storage.get_merged_venvs(project_venvs)
+            self._basefolder_migrated = False
+
+        # Rebuild sequence display from merged list
+        self._rebuild_sequence_display(merged)
+
+        # Update config path display
+        self._update_config_path_display()
+
+        # Log stale paths
+        stale = [e for e in merged if e.get('stale')]
+        if stale:
+            names = ', '.join(e['name'] for e in stale)
+            self._log(f"{len(stale)} venv(s) have stale paths: {names}", level='WARNING')
+
+    def _rebuild_sequence_display(self, entries: list):
+        """Rebuild sequence parameters from merged entry list (display only)."""
+        venv_seq = getattr(self.ownerComp.seq, 'Venv', None)
+        if venv_seq is None:
+            return
+
+        # Set sequence block count to match entries (min 1)
+        target_blocks = max(1, len(entries))
+        venv_seq.numBlocks = target_blocks
+
+        # Clear entry layers tracker
+        self._entry_layers = {}
+
+        for i, entry in enumerate(entries):
+            name_par = getattr(self.ownerComp.par, f'Venv{i}name', None)
+            path_par = getattr(self.ownerComp.par, f'Venv{i}path', None)
+            import_par = getattr(self.ownerComp.par, f'Venv{i}import', None)
+            status_par = getattr(self.ownerComp.par, f'Venv{i}status', None)
+
+            resolved = entry.get('resolved_path', entry.get('path', ''))
+
+            if name_par:
+                name_par.val = entry.get('name', '')
+            if path_par:
+                path_par.val = resolved
+            if import_par:
+                import_par.val = entry.get('import', False)
+
+            # Track layer for this index
+            self._entry_layers[i] = entry.get('source_layer', 'user')
+
+            # Build status with tier label
+            if status_par:
+                layer = entry.get('source_layer', '')
+                stale = entry.get('stale', False)
+                if stale:
+                    status_par.val = f"[{layer}] STALE"[:20]
+                elif resolved and os.path.exists(resolved):
+                    info = self.venv.check_venv(resolved)
+                    ver = info.get('python_version', '')
+                    if ver:
+                        ver_short = ver.replace('Python ', '')
+                        # Just major.minor
+                        parts = ver_short.split('.')
+                        if len(parts) >= 2:
+                            ver_short = f"{parts[0]}.{parts[1]}"
+                        status_par.val = f"[{layer}] {ver_short}"[:20]
+                    else:
+                        status_par.val = f"[{layer}]"[:20]
+                else:
+                    status_par.val = f"[{layer}]"[:20]
+
+        # Clear any remaining slots if we shrunk
+        if len(entries) == 0:
+            for par_name in ('Venv0name', 'Venv0path', 'Venv0status'):
+                par = getattr(self.ownerComp.par, par_name, None)
+                if par:
+                    par.val = ''
+            import_par = getattr(self.ownerComp.par, 'Venv0import', None)
+            if import_par:
+                import_par.val = False
+
+    def _maybe_migrate_basefolder(self, existing_merged: list):
+        """Register Basefolder venv to user tier if it exists and isn't in any tier."""
+        self._basefolder_migrated = False
         base = self.ownerComp.par.Basefolder.eval()
         if not base:
             return
 
         venv_path = os.path.join(base, 'venv')
         if not os.path.exists(venv_path):
-            # Try without 'venv' subfolder (in case Basefolder IS the venv)
             if os.path.exists(os.path.join(base, 'Scripts', 'python.exe')) or \
                os.path.exists(os.path.join(base, 'bin', 'python')):
                 venv_path = base
             else:
                 return
 
-        # Check if already in sequence (deduplication)
-        if self._is_venv_in_sequence(venv_path):
-            self._log(f"Venv already registered: {venv_path}")
+        # Check if this path already exists in merged
+        all_paths = {e.get('resolved_path', e.get('path', '')) for e in existing_merged}
+        if venv_path in all_paths:
             return
 
-        # Add to registry
+        # Register to user tier
         name = os.path.basename(base)
-        if self._add_to_registry(name, venv_path):
-            self._log(f"Auto-registered venv from Basefolder: {venv_path}")
-            # If Addtosyspath toggle is on, set sequence import toggle (delayed 1 frame)
-            if self.ownerComp.par.Addtosyspath.eval():
-                run("args[0]._set_sequence_import_for_path(args[1], True)",
-                    self, venv_path, delayFrames=1)
+        config = {
+            'path': venv_path,
+            'import': self.ownerComp.par.Addtosyspath.eval(),
+            'description': 'Basefolder venv'
+        }
+        self.storage.add_venv(name, config, 'user')
+        self._log(f"Migrated Basefolder venv to user config: {venv_path}")
+        self._basefolder_migrated = True
 
-    def _add_to_registry(self, name: str, venv_path: str) -> bool:
-        """Add a venv to the registry sequence."""
-        # Deduplication check
-        if self._is_venv_in_sequence(venv_path):
-            self._log(f"Venv already in registry: {venv_path}")
-            return True
+    def _maybe_migrate_from_legacy_sequence(self):
+        """One-time migration from old sequence-based storage to JSON.
+        Runs if JSON files are empty but sequence has entries."""
+        # Check if any JSON entries already exist
+        project_venvs = self._read_project_venvs()
+        merged = self.storage.get_merged_venvs(project_venvs)
+        if len(merged) > 0:
+            return  # Already have config data, skip migration
 
-        slot = self._find_next_sequence_slot()
+        # Read legacy sequence entries
+        entries = self._get_sequence_entries()
+        valid_entries = [e for e in entries if e['path']]
 
-        name_par = getattr(self.ownerComp.par, f'Venv{slot}name', None)
-        path_par = getattr(self.ownerComp.par, f'Venv{slot}path', None)
+        if not valid_entries:
+            return
 
-        # If slot params don't exist, add a new block to the sequence
-        if name_par is None or path_par is None:
-            venv_seq = getattr(self.ownerComp.seq, 'Venv', None)
-            if venv_seq is None:
-                self._log("No Venv sequence found on this operator", level='WARNING')
-                return False
-            # Increment numBlocks to create new sequence parameters
-            venv_seq.numBlocks = slot + 1
-            self._log(f"Added new sequence block (numBlocks={slot + 1})")
-            # Re-fetch the parameters
-            name_par = getattr(self.ownerComp.par, f'Venv{slot}name', None)
-            path_par = getattr(self.ownerComp.par, f'Venv{slot}path', None)
-            if name_par is None or path_par is None:
-                self._log(f"Failed to create sequence block {slot}", level='ERROR')
-                return False
+        self._log(f"Migrating {len(valid_entries)} sequence entries to user config JSON...")
 
-        name_par.val = name
-        path_par.val = venv_path
+        # Write all to user tier
+        user_venvs = {}
+        for entry in valid_entries:
+            name = entry['name'] or os.path.basename(entry['path'])
+            # Deduplicate names
+            base_name = name
+            counter = 1
+            while name in user_venvs:
+                name = f"{base_name}_{counter}"
+                counter += 1
+            user_venvs[name] = {
+                'path': entry['path'],
+                'import': entry['import'],
+                'description': 'migrated from sequence'
+            }
 
-        self._update_sequence_status(slot)
+        self.storage.write_venvs(user_venvs, 'user')
+        self._log(f"Migration complete: {len(user_venvs)} entries saved to user config")
+
+    def _add_to_registry(self, name: str, venv_path: str, layer: str = None) -> bool:
+        """Add a venv to the config tier and rebuild display."""
+        if layer is None:
+            layer = self.ownerComp.par.Configlocation.eval()
+
+        config = {
+            'path': venv_path,
+            'import': False,
+            'description': ''
+        }
+
+        if layer == 'project':
+            project_venvs = self._read_project_venvs()
+            project_venvs[name] = config
+            self._write_project_venvs(project_venvs)
+        elif layer == 'project_folder':
+            config['path'] = self.storage.to_relative_path(venv_path)
+            self.storage.add_venv(name, config, 'folder')
+        else:  # 'user'
+            self.storage.add_venv(name, config, 'user')
+
+        # Rebuild display
+        self._load_and_rebuild_registry()
         self.Refreshenvmenu()
-        self._log(f"Added to registry[{slot}]: {name} -> {venv_path}")
+        self._log(f"Added to registry [{layer}]: {name} -> {venv_path}")
         return True
+
+    def _get_entry_layer(self, index: int) -> str:
+        """Get the source tier for a sequence entry by index."""
+        return self._entry_layers.get(index, 'user')
+
+    # ==================== CONFIG PARAMETER CALLBACKS ====================
+
+    def onParConfiglocation(self):
+        """Update config path display when location selector changes."""
+        self._update_config_path_display()
+
+    def onParRefreshregistry(self):
+        """Reload from all config tiers and rebuild sequence display."""
+        self._load_and_rebuild_registry()
+        self.Refreshenvmenu()
+        self._import_sequence_venvs()
+        self._log("Registry refreshed from config files")
+
+    def onParEditconfigfile(self):
+        """Open the active config JSON in system editor."""
+        location = self.ownerComp.par.Configlocation.eval()
+        if location == 'project':
+            self._log("Project config is stored in operator DAT — edit directly in TD")
+            return
+
+        file_layer = 'user' if location == 'user' else 'folder'
+        config_path = self.storage.get_effective_config_path(file_layer)
+
+        if not config_path:
+            self._log("Config path not available", level='ERROR')
+            return
+
+        # Ensure file exists before opening
+        self.storage.ensure_dirs(file_layer)
+        if not os.path.exists(config_path):
+            self.storage.write_config({
+                'version': '1.0',
+                'venvs': {},
+                'sidecar_overrides': {}
+            }, file_layer)
+
+        # Open with system default editor
+        if sys.platform == 'win32':
+            os.startfile(config_path)
+        else:
+            subprocess.Popen(['open', config_path])
+
+    def _update_config_path_display(self):
+        """Update the Configpath display parameter."""
+        location = self.ownerComp.par.Configlocation.eval()
+        if location == 'user':
+            path = self.storage.get_user_config_path()
+        elif location == 'project_folder':
+            path = self.storage.get_folder_config_path()
+        else:
+            path = '(stored in operator DAT)'
+        self.ownerComp.par.Configpath = path or '(not configured)'
 
     # ==================== SEQUENCE PARAMETER HANDLING ====================
 
