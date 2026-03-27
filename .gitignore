@@ -1,0 +1,21 @@
+# TouchDesigner
+Backup/
+*.dmp
+*.*.toe
+olib/
+TDImportCache/
+mapping/
+CrashAutoSave.*
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
