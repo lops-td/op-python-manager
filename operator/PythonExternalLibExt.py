@@ -72,16 +72,26 @@ class PythonExternalLibExt(DotLOPUtils):
         try:
             self.Setpython()  # Auto-detect python on init
             self._maybe_migrate_from_legacy_sequence()  # One-time migration
-            self._load_and_rebuild_registry()  # Load from JSON tiers, rebuild display
-            self.Refreshenvmenu()  # Populate environment menu from sequence
-            self._import_sequence_venvs()  # Add venvs with import=True to sys.path
         except Exception as e:
             self._log(f"Init error (operator still loaded): {e}", level='ERROR')
         self._log("PythonExternalLibExt initialized")
+        # Defer sequence-dependent init by 1 frame — TD 2025 resets sequence block
+        # parameter values after __init__ returns, discarding any writes made during init.
+        run("args[0].ext.PythonExternalLibExt._deferred_init()", self.ownerComp, delayFrames=1)
 
     def _log(self, msg, level='INFO'):
         """Wrapper for logger.log to simplify logging calls."""
         self.logger.log(msg, level=level)
+
+    def _deferred_init(self):
+        """Deferred post-init: runs 1 frame after __init__ so sequence block parameters
+        are fully committed by TD before we write to them."""
+        try:
+            self._load_and_rebuild_registry()
+            self.Refreshenvmenu()
+            self._import_sequence_venvs()
+        except Exception as e:
+            self._log(f"Deferred init error: {e}", level='ERROR')
 
     # ==================== PROJECT CONFIG DAT ====================
 
@@ -1433,18 +1443,18 @@ except Exception as e:
 
             resolved = entry.get('resolved_path', entry.get('path', ''))
 
-            if name_par:
+            if name_par is not None:
                 name_par.val = entry.get('name', '')
-            if path_par:
+            if path_par is not None:
                 path_par.val = resolved
-            if import_par:
+            if import_par is not None:
                 import_par.val = entry.get('import', False)
 
             # Track layer for this index
             self._entry_layers[i] = entry.get('source_layer', 'user')
 
             # Build status with tier label
-            if status_par:
+            if status_par is not None:
                 layer = entry.get('source_layer', '')
                 stale = entry.get('stale', False)
                 if stale:
@@ -1468,10 +1478,10 @@ except Exception as e:
         if len(entries) == 0:
             for par_name in ('Venv0name', 'Venv0path', 'Venv0status'):
                 par = getattr(self.ownerComp.par, par_name, None)
-                if par:
+                if par is not None:
                     par.val = ''
             import_par = getattr(self.ownerComp.par, 'Venv0import', None)
-            if import_par:
+            if import_par is not None:
                 import_par.val = False
 
     def _maybe_migrate_basefolder(self, existing_merged: list):
