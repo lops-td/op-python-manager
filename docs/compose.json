@@ -1,0 +1,33 @@
+{
+  "name": "python_manager",
+  "role": "Manages Python virtual environments, package installation, and sys.path orchestration with a three-tier config system.",
+  "category": "utility",
+  "tags": ["python", "venv", "packages", "sys_path"],
+  "inputs": {
+    "connectors": 0,
+    "note": "No inputs. Configured through parameter panel and exposes promoted methods to other operators."
+  },
+  "outputs": {
+    "connectors": 1,
+    "note": "One output, but primarily a configuration utility — not a data pipeline operator"
+  },
+  "setup_required": [],
+  "setup_optional": [
+    {"param": "Backend", "default": "uv", "why": "Package manager: 'uv' (fast, auto-downloads Python) or 'pip' (standard, uses system Python)"},
+    {"param": "Basefolder", "default": "", "why": "Directory where the venv is created. A folder picker opens if pulsing Createvenv without this set."},
+    {"param": "Pythonversion", "default": "3.11", "why": "Python version for UV backend. UV auto-downloads the requested version."},
+    {"param": "Addtosyspath", "default": true, "why": "Toggle the venv's site-packages into TouchDesigner's sys.path for import access"},
+    {"param": "Configlocation", "default": "user", "why": "Where to save new env registrations: 'user' (machine-wide), 'folder' (portable .lops/), or 'project' (embedded in .toe)"},
+    {"param": "Showconsole", "default": true, "why": "Show the console window during pip/uv operations"}
+  ],
+  "gotchas": [
+    "Most users do not need this operator — ChatTD includes a built-in Python Manager for all LOPs dependencies",
+    "Only place this when you need a separate venv, isolated environment, or manual multi-env control",
+    "UV backend requires 'uv' in system PATH — operator prompts to switch to pip if not found",
+    "Environments page sequence is display-only and rebuilt from JSON config — editing rows directly does nothing",
+    "Environments marked 'STALE' have paths that no longer exist on disk — recreate or update path via Edit Config File",
+    "Three-tier priority: Project (.toe) > Folder (.lops/) > User (AppData) — higher tier wins on name collision"
+  ],
+  "recipe_example": "pyenv:LOPs:python_manager (Backend=uv, Pythonversion=3.11)",
+  "pairs_with": []
+}

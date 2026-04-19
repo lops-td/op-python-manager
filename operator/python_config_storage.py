@@ -53,18 +53,19 @@ class PythonConfigStorage:
         Get user config file path.
 
         Returns:
-            Path to {AppData}/ChatTD/python_config.json or None
+            Path to {AppData}/dotLOPs/python_config.json or None
         """
         try:
             if sys.platform == 'win32':
                 appdata = os.getenv('APPDATA')
                 if not appdata:
                     return None
-                base_dir = os.path.join(appdata, 'ChatTD')
+                base_dir = os.path.join(appdata, 'dotLOPs')
             elif sys.platform == 'darwin':
-                base_dir = os.path.expanduser('~/Library/Application Support/ChatTD')
+                base_dir = os.path.expanduser('~/Library/Application Support/dotLOPs')
             else:
-                base_dir = os.path.expanduser('~/.config/ChatTD')
+                xdg = os.environ.get('XDG_CONFIG_HOME') or os.path.expanduser('~/.config')
+                base_dir = os.path.join(xdg, 'dotLOPs')
 
             return os.path.join(base_dir, self.CONFIG_FILE)
         except Exception as e:
