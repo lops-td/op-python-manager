@@ -3,10 +3,10 @@
   "type": "baseCOMP",
   "family": "COMP",
   "tags": [
-    "python_managerLOP",
-    "LOP"
+    "LOP",
+    "python_managerLOP"
   ],
-  "generated_at": "2026-03-26T22:21:43.310338",
+  "generated_at": "2026-05-02T05:27:40.079741",
   "td_version": "099",
   "td_build": "2023.12370",
   "inputs": 0,
@@ -31,10 +31,12 @@
         "section": true,
         "help": "Select registered environment or Custom to use Base Folder",
         "menu_names": [
-          "custom"
+          "custom",
+          "D:/TD-tox/LOPS_tox/INSTALLvenv\\venv"
         ],
         "menu_labels": [
-          "Custom / New Venv"
+          "Custom / New Venv",
+          "INSTALLvenv"
         ]
       },
       {
@@ -59,7 +61,7 @@
         "name": "Addtosyspath",
         "label": "Add to sys.path",
         "style": "Toggle",
-        "default": "False",
+        "default": "True",
         "is_read_only": false,
         "section": false,
         "help": "Add venv site-packages to TouchDesigner sys.path. Syncs with sequence import toggle."
@@ -94,7 +96,7 @@
         "name": "Pythonversion",
         "label": "Python Version (UV)",
         "style": "StrMenu",
-        "default": "",
+        "default": "3.11",
         "is_read_only": false,
         "section": false,
         "help": "Python version for UV venv creation",
@@ -164,16 +166,12 @@
         "menu_names": [
           "C:/Users/DotSimulate/AppData/Local/Programs/Python/Python311/python.exe",
           "C:\\Users\\DotSimulate\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
-          "C:\\Users\\DotSimulate\\AppData\\Local\\Programs\\Python\\Python310\\python.exe",
-          "C:\\Users\\DotSimulate\\AppData\\Local\\Microsoft\\WindowsApps\\python.exe",
-          "C:\\Users\\DotSimulate\\AppData\\Local\\Microsoft\\WindowsApps\\python.exe"
+          "C:\\Users\\DotSimulate\\AppData\\Local\\Programs\\Python\\Python310\\python.exe"
         ],
         "menu_labels": [
           "Python311",
           "Python311",
-          "Python310",
-          "python.exe",
-          "python.exe"
+          "Python310"
         ]
       },
       {
@@ -304,7 +302,7 @@
         "name": "Showconsole",
         "label": "Show Console",
         "style": "Toggle",
-        "default": "False",
+        "default": "True",
         "is_read_only": false,
         "section": true,
         "help": "Show console window for operations"
@@ -322,7 +320,7 @@
         "name": "Showpopups",
         "label": "Show Popups",
         "style": "Toggle",
-        "default": "False",
+        "default": "True",
         "is_read_only": false,
         "section": false,
         "help": "Show popup notifications"
@@ -358,7 +356,7 @@
         "name": "Venv0name",
         "label": "name",
         "style": "Str",
-        "default": "",
+        "default": "INSTALLvenv",
         "is_read_only": false,
         "section": false
       },
@@ -374,7 +372,7 @@
         "name": "Venv0import",
         "label": "import",
         "style": "Toggle",
-        "default": "False",
+        "default": "True",
         "is_read_only": false,
         "section": false
       },
@@ -387,12 +385,58 @@
         "section": false
       },
       {
+        "name": "Configlocation",
+        "label": "Save New Envs To",
+        "style": "Menu",
+        "default": "user",
+        "is_read_only": false,
+        "section": true,
+        "help": "Where new venvs are saved. User = machine-wide, Folder = portable, Project = in .toe file.",
+        "menu_names": [
+          "user",
+          "project_folder",
+          "project"
+        ],
+        "menu_labels": [
+          "User Config",
+          "Project Folder (.lops/)",
+          "Project (.toe)"
+        ]
+      },
+      {
         "name": "Venv0status",
         "label": "Status",
         "style": "Str",
         "default": "",
         "is_read_only": true,
         "section": false
+      },
+      {
+        "name": "Configpath",
+        "label": "Config Path",
+        "style": "Str",
+        "default": "",
+        "is_read_only": true,
+        "section": false,
+        "help": "Resolved path of the active config location"
+      },
+      {
+        "name": "Refreshregistry",
+        "label": "Refresh Registry",
+        "style": "Pulse",
+        "default": "False",
+        "is_read_only": false,
+        "section": false,
+        "help": "Reload venv registry from all config tiers"
+      },
+      {
+        "name": "Editconfigfile",
+        "label": "Edit Config File",
+        "style": "Pulse",
+        "default": "False",
+        "is_read_only": false,
+        "section": false,
+        "help": "Open the active config JSON in system editor"
       }
     ],
     "About": [
