@@ -70,6 +70,7 @@ class PythonExternalLibExt(DotLOPUtils):
         self._setup_project_config_dat()
         self._setup_parameters()
         try:
+            self._sync_uv_status()
             self.Setpython()  # Auto-detect python on init
             self._maybe_migrate_from_legacy_sequence()  # One-time migration
         except Exception as e:
@@ -183,6 +184,26 @@ class PythonExternalLibExt(DotLOPUtils):
             menuLabels=['UV (Fast)', 'pip (Standard)'],
             help="Package manager backend. UV auto-downloads Python, pip uses system Python.",
             section=True)
+
+        self.create_parameter('Uvstatus', 'str', page=page,
+            label='UV Status', default='Unknown', readOnly=True,
+            help="Resolved UV availability and version.",
+            enableExpr="me.par.Backend == 'uv'")
+
+        self.create_parameter('Uvpath', 'file', page=page,
+            label='UV Path', default='', readOnly=True,
+            help="Resolved UV executable used by the UV backend.",
+            enableExpr="me.par.Backend == 'uv'")
+
+        self.create_parameter('Bootstrapuv', 'pulse', page=page,
+            label='Download UV',
+            help="Download Astral UV into the dotLOPs user data folder.",
+            enableExpr="me.par.Backend == 'uv'")
+
+        self.create_parameter('Chooseuvpath', 'pulse', page=page,
+            label='Choose UV',
+            help="Point LOPs at an existing UV executable.",
+            enableExpr="me.par.Backend == 'uv'")
 
         self.create_parameter('Pythonversion', 'strmenu', page=page,
             label='Python Version (UV)', default='3.11',
@@ -488,6 +509,106 @@ class PythonExternalLibExt(DotLOPUtils):
             exe = self.venv.get_python_exe(venv_path)
             self._log(f"Venv Python: {exe}" if exe else "Venv Python not found")
 
+    def _get_uv_install_dir(self) -> str:
+        """Return the dotLOPs-managed UV install directory."""
+        if sys.platform == 'win32':
+            root = os.environ.get('LOCALAPPDATA') or os.environ.get('APPDATA') or os.path.expanduser('~')
+            return os.path.join(root, 'dotLOPs', 'uv')
+        if sys.platform == 'darwin':
+            return os.path.expanduser('~/Library/Application Support/dotLOPs/uv')
+        xdg_data = os.environ.get('XDG_DATA_HOME') or os.path.expanduser('~/.local/share')
+        return os.path.join(xdg_data, 'dotLOPs', 'uv')
+
+    def _expected_uv_exe(self) -> str:
+        return os.path.join(self._get_uv_install_dir(), 'uv.exe' if sys.platform == 'win32' else 'uv')
+
+    def _sync_uv_status(self, uv_path: str = None) -> bool:
+        """Refresh UV status/path parameters from VenvCore detection."""
+        if uv_path is not None:
+            self.venv.set_uv_path(uv_path)
+        elif self.ownerComp.par.Uvpath.eval():
+            self.venv.set_uv_path(self.ownerComp.par.Uvpath.eval())
+        elif os.path.exists(self._expected_uv_exe()):
+            self.venv.set_uv_path(self._expected_uv_exe())
+
+        available = self.venv.check_uv_available()
+        if available:
+            resolved = self.venv.get_uv_path()
+            version = self.venv.get_uv_version()
+            self.ownerComp.par.Uvpath = resolved
+            self.ownerComp.par.Uvstatus = version or 'Available'
+            return True
+
+        self.ownerComp.par.Uvstatus = 'Missing'
+        return False
+
+    def Chooseuvpath(self):
+        """Point LOPs at an existing UV executable."""
+        if sys.platform == 'win32':
+            selected = ui.chooseFile(load=True, fileTypes=['exe'], title='Select UV executable')
+        else:
+            selected = ui.chooseFile(load=True, title='Select UV executable')
+        if not selected:
+            self._log("UV path selection cancelled", level='WARNING')
+            return False
+        if self._sync_uv_status(selected):
+            self._log(f"Using UV at: {self.ownerComp.par.Uvpath.eval()}")
+            return True
+        self._log(f"Selected file is not a working UV executable: {selected}", level='ERROR')
+        return False
+
+    def Bootstrapuv(self):
+        """Download Astral UV into dotLOPs-managed user storage."""
+        install_dir = self._get_uv_install_dir()
+        os.makedirs(install_dir, exist_ok=True)
+        self.ownerComp.par.Uvstatus = 'Installing...'
+        self._log(f"Installing UV to {install_dir}")
+
+        env = os.environ.copy()
+        env['UV_INSTALL_DIR'] = install_dir
+        env['UV_NO_MODIFY_PATH'] = '1'
+
+        try:
+            if sys.platform == 'win32':
+                cmd = [
+                    'powershell',
+                    '-NoProfile',
+                    '-ExecutionPolicy', 'Bypass',
+                    '-Command',
+                    'irm https://astral.sh/uv/install.ps1 | iex'
+                ]
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=180,
+                    env=env,
+                    creationflags=subprocess.CREATE_NO_WINDOW
+                )
+            else:
+                shell = 'sh'
+                cmd = [shell, '-c', 'curl -LsSf https://astral.sh/uv/install.sh | sh']
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=180, env=env)
+
+            if result.returncode != 0:
+                detail = (result.stderr or result.stdout or '').strip()
+                self.ownerComp.par.Uvstatus = 'Install failed'
+                self._log(f"UV install failed: {detail[:1000]}", level='ERROR')
+                return False
+        except Exception as e:
+            self.ownerComp.par.Uvstatus = 'Install failed'
+            self._log(f"UV install error: {e}", level='ERROR')
+            return False
+
+        uv_exe = self._expected_uv_exe()
+        if self._sync_uv_status(uv_exe):
+            self._log(f"UV installed successfully: {self.ownerComp.par.Uvstatus.eval()}")
+            return True
+
+        self.ownerComp.par.Uvstatus = 'Install failed'
+        self._log(f"UV installer completed but executable did not validate at {uv_exe}", level='ERROR')
+        return False
+
     def _check_backend_available(self) -> str:
         """
         Check if the selected backend is available. If UV is selected but not
@@ -499,22 +620,22 @@ class PythonExternalLibExt(DotLOPUtils):
         backend = self.ownerComp.par.Backend.eval()
 
         if backend == 'uv':
-            if not self.venv.check_uv_available():
+            if not self._sync_uv_status():
                 # UV not available - prompt user
                 result = ui.messageBox(
                     'UV Not Found',
-                    'UV package manager is not installed on this system.\n\n'
-                    'Would you like to switch to pip (standard Python package manager) instead?\n\n'
-                    'Note: pip requires Python to be installed separately.',
-                    buttons=['Switch to pip', 'Cancel']
+                    'UV package manager is not installed or configured.\n\n'
+                    'LOPs can download UV into your dotLOPs user data folder without admin access or PATH changes.',
+                    buttons=['Download UV', 'Choose Existing UV', 'Cancel']
                 )
-                if result == 0:  # Switch to pip
-                    self.ownerComp.par.Backend = 'pip'
-                    self._log("Switched backend to pip (UV not available)")
-                    return 'pip'
-                else:
-                    self._log("Operation cancelled - UV not available", level='WARNING')
-                    return None
+                if result == 0:
+                    if self.Bootstrapuv():
+                        return 'uv'
+                elif result == 1:
+                    if self.Chooseuvpath():
+                        return 'uv'
+                self._log("Operation cancelled - UV not available", level='WARNING')
+                return None
         return backend
 
     # ==================== BACKWARDS-COMPATIBLE API ====================
@@ -1524,9 +1645,9 @@ except Exception as e:
         if len(merged) > 0:
             return  # Already have config data, skip migration
 
-        # Read legacy sequence entries
+        # Read legacy sequence entries — only migrate paths that exist on THIS machine
         entries = self._get_sequence_entries()
-        valid_entries = [e for e in entries if e['path']]
+        valid_entries = [e for e in entries if e['path'] and os.path.exists(e['path'])]
 
         if not valid_entries:
             return

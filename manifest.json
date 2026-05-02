@@ -5,7 +5,7 @@
   "extends": [
     "util-base-lop"
   ],
-  "category": "lops-controls",
+  "category": "Settings",
   "release_level": "prod",
   "td": {
     "build": "2023.12370"

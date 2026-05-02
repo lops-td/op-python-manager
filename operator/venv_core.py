@@ -78,6 +78,8 @@ class VenvCore:
         self.logger = logger
         self._default_backend = default_backend
         self._uv_available = None  # Cached after first check
+        self._uv_path = None
+        self._uv_version = ''
 
     def _log(self, message: str, level: str = 'INFO'):
         """Log message if logger available."""
@@ -92,18 +94,62 @@ class VenvCore:
 
     # ==================== UV Availability ====================
 
-    def check_uv_available(self) -> bool:
+    def set_uv_path(self, uv_path: Optional[str]) -> None:
+        """Set an explicit UV executable path and invalidate cached detection."""
+        self._uv_path = uv_path.strip() if isinstance(uv_path, str) and uv_path.strip() else None
+        self._uv_available = None
+        self._uv_version = ''
+
+    def get_uv_path(self) -> str:
+        """Return the resolved UV executable path, or empty string if unavailable."""
+        if self.check_uv_available():
+            return self._resolve_uv_executable() or ''
+        return ''
+
+    def get_uv_version(self) -> str:
+        """Return the last detected UV version string."""
+        if not self._uv_version:
+            self.check_uv_available()
+        return self._uv_version
+
+    def _resolve_uv_executable(self) -> Optional[str]:
+        """Resolve UV from an explicit path first, then PATH."""
+        candidates = []
+        if self._uv_path:
+            candidates.append(self._uv_path)
+            if os.path.isdir(self._uv_path):
+                candidates.append(os.path.join(self._uv_path, 'uv.exe' if is_windows() else 'uv'))
+
+        path_uv = shutil.which('uv')
+        if path_uv:
+            candidates.append(path_uv)
+
+        for candidate in candidates:
+            if candidate and os.path.isfile(candidate):
+                return candidate
+        return None
+
+    def check_uv_available(self, uv_path: Optional[str] = None) -> bool:
         """
         Check if UV is installed and accessible.
         Result is cached after first call.
         """
+        if uv_path is not None:
+            self.set_uv_path(uv_path)
+
         if self._uv_available is not None:
             return self._uv_available
+
+        uv_exe = self._resolve_uv_executable()
+        if not uv_exe:
+            self._log('UV not found in configured path or PATH', 'WARNING')
+            self._uv_available = False
+            return False
 
         try:
             creationflags = subprocess.CREATE_NO_WINDOW if is_windows() else 0
             result = subprocess.run(
-                ['uv', '--version'],
+                [uv_exe, '--version'],
                 capture_output=True,
                 text=True,
                 timeout=10,
@@ -111,11 +157,13 @@ class VenvCore:
             )
             if result.returncode == 0:
                 version = result.stdout.strip()
-                self._log(f'UV found: {version}', 'INFO')
+                self._uv_version = version
+                self._uv_path = uv_exe
+                self._log(f'UV found: {version} ({uv_exe})', 'INFO')
                 self._uv_available = True
                 return True
         except FileNotFoundError:
-            self._log('UV not found in PATH', 'WARNING')
+            self._log(f'UV not found: {uv_exe}', 'WARNING')
         except Exception as e:
             self._log(f'Error checking UV: {e}', 'WARNING')
 
@@ -296,7 +344,12 @@ class VenvCore:
 
     def _create_venv_uv(self, venv_path: str, python_version: Optional[str], extra_args: Optional[List[str]] = None) -> bool:
         """Create venv using UV."""
-        cmd = ['uv', 'venv', venv_path]
+        uv_exe = self._resolve_uv_executable()
+        if not uv_exe:
+            self._log('Cannot create UV venv: UV executable not found', 'ERROR')
+            return False
+
+        cmd = [uv_exe, 'venv', venv_path]
         if python_version:
             cmd.extend(['--python', python_version])
         if extra_args:
@@ -418,7 +471,12 @@ class VenvCore:
                              index_url: Optional[str], extra_args: Optional[List[str]],
                              wait: bool, show_console: bool, timeout: int) -> bool:
         """Install packages using UV."""
-        cmd = ['uv', 'pip', 'install', '--python', python_exe]
+        uv_exe = self._resolve_uv_executable()
+        if not uv_exe:
+            self._log('Cannot install with UV: UV executable not found', 'ERROR')
+            return False
+
+        cmd = [uv_exe, 'pip', 'install', '--python', python_exe]
 
         if index_url:
             cmd.extend(['--index-url', index_url])
@@ -507,7 +565,11 @@ class VenvCore:
 
         try:
             if backend == 'uv':
-                cmd = ['uv', 'pip', 'uninstall', '--python', python_exe] + packages
+                uv_exe = self._resolve_uv_executable()
+                if not uv_exe:
+                    self._log('Cannot uninstall with UV: UV executable not found', 'ERROR')
+                    return False
+                cmd = [uv_exe, 'pip', 'uninstall', '--python', python_exe] + packages
             else:
                 python_exe = get_short_path_name(python_exe)
                 cmd = [python_exe, '-m', 'pip', 'uninstall', '-y'] + packages
@@ -544,7 +606,11 @@ class VenvCore:
 
         try:
             if backend == 'uv':
-                cmd = ['uv', 'pip', 'list', '--python', python_exe, '--format', 'json']
+                uv_exe = self._resolve_uv_executable()
+                if not uv_exe:
+                    self._log('Cannot list with UV: UV executable not found', 'ERROR')
+                    return []
+                cmd = [uv_exe, 'pip', 'list', '--python', python_exe, '--format', 'json']
             else:
                 python_exe = get_short_path_name(python_exe)
                 cmd = [python_exe, '-m', 'pip', 'list', '--format', 'json']
