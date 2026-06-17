@@ -526,7 +526,7 @@ class PythonExternalLibExt(DotLOPUtils):
         """Refresh UV status/path parameters from VenvCore detection."""
         if uv_path is not None:
             self.venv.set_uv_path(uv_path)
-        elif self.ownerComp.par.Uvpath.eval():
+        elif self.ownerComp.par.Uvpath.eval() and os.path.exists(self.ownerComp.par.Uvpath.eval()):
             self.venv.set_uv_path(self.ownerComp.par.Uvpath.eval())
         elif os.path.exists(self._expected_uv_exe()):
             self.venv.set_uv_path(self._expected_uv_exe())
@@ -539,6 +539,7 @@ class PythonExternalLibExt(DotLOPUtils):
             self.ownerComp.par.Uvstatus = version or 'Available'
             return True
 
+        self.ownerComp.par.Uvpath = ''
         self.ownerComp.par.Uvstatus = 'Missing'
         return False
 
@@ -1806,6 +1807,27 @@ except Exception as e:
             self._remove_from_syspath(venv_path)
 
         self._update_sequence_status(index)
+
+        # Persist toggle state back to config JSON
+        name_par = getattr(self.ownerComp.par, f'Venv{index}name', None)
+        if not name_par:
+            return
+        venv_name = name_par.eval()
+        if not venv_name:
+            return
+
+        layer = self._get_entry_layer(index)
+        if layer == 'project':
+            project_venvs = self._read_project_venvs()
+            if venv_name in project_venvs:
+                project_venvs[venv_name]['import'] = value
+                self._write_project_venvs(project_venvs)
+        elif layer in ('user', 'folder'):
+            file_layer = 'folder' if layer == 'folder' else 'user'
+            venvs = self.storage.read_venvs(file_layer)
+            if venv_name in venvs:
+                venvs[venv_name]['import'] = value
+                self.storage.write_venvs(venvs, file_layer)
 
     def OnVenvOpenPulse(self, index: int):
         """Handle open pulse for a sequence entry."""
