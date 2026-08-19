@@ -3,10 +3,10 @@
   "type": "baseCOMP",
   "family": "COMP",
   "tags": [
-    "LOP",
-    "python_managerLOP"
+    "python_managerLOP",
+    "LOP"
   ],
-  "generated_at": "2026-05-02T05:27:40.079741",
+  "generated_at": "2026-08-18T19:35:55.502692",
   "td_version": "099",
   "td_build": "2023.12370",
   "inputs": 0,
@@ -356,7 +356,7 @@
         "name": "Venv0name",
         "label": "name",
         "style": "Str",
-        "default": "INSTALLvenv",
+        "default": "",
         "is_read_only": false,
         "section": false
       },
