@@ -20,3 +20,17 @@ Unified Python environment manager for TouchDesigner, providing a robust interfa
 - **Operator Integration:** Provides a backward-compatible API (`Pipinstall`, `Addtosyspath`, etc.) used by other LOP operators to automate their own dependency setup.
 - **Cross-Platform Utility:** Includes Windows-specific optimizations like 8.3 short-path conversion to handle directory names with spaces and special characters.
 - **State Persistence:** Maintains a detailed registry of managed venvs, their status, and installed package lists in structured TouchDesigner DATs.
+
+## License
+
+`op-python-manager` is licensed under the [Apache License 2.0](LICENSE).
+
+It is a standalone system component and may be used freely, including in
+commercial projects. Other DOTsimulate products — including the LOPs operator
+library — are **not** covered by this license and are governed by the
+[DOTsimulate Licensing and Usage terms](https://docs.dotsimulate.com/legal/licensing-and-usage/).
+
+Note: builds up to and including 1.3.1 shipped under the LOPs Operators License
+v2.0. The Apache 2.0 grant applies from 1.3.2 onward.
+
+Questions: licensing@dotsimulate.com
