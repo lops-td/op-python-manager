@@ -4,9 +4,19 @@
 
 Unified Python environment manager for TouchDesigner, providing a robust interface for managing virtual environments (venvs) across various operators. It ensures that complex AI and data science dependencies remain isolated, consistent, and correctly integrated into the TouchDesigner Python path.
 
+## Download
+
+[Download the latest standalone TOX from GitHub Releases](https://github.com/lops-td/op-python-manager/releases/latest).
+
 ## Changelogs
 
-- [1.0.0](changelog/1.0.0.md) - Latest
+- [1.3.2](changelog/1.3.2.md) - Latest
+- [1.3.0](changelog/1.3.0.md)
+- [1.2.0](changelog/1.2.0.md)
+- [1.1.2](changelog/1.1.2.md)
+- [1.1.1](changelog/1.1.1.md)
+- [1.1.0](changelog/1.1.0.md)
+- [1.0.0](changelog/1.0.0.md)
 
 ## Documentation
 
