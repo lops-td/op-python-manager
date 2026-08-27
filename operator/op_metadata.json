@@ -3,10 +3,10 @@
   "type": "baseCOMP",
   "family": "COMP",
   "tags": [
-    "python_managerLOP",
-    "LOP"
+    "LOP",
+    "python_managerLOP"
   ],
-  "generated_at": "2026-08-18T19:35:55.502692",
+  "generated_at": "2026-08-26T22:22:58.551193",
   "td_version": "099",
   "td_build": "2023.12370",
   "inputs": 0,
